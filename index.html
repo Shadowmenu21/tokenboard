@@ -162,6 +162,17 @@ textarea{min-height:56px;resize:vertical}
 .lifebtns .btn.down{color:var(--danger)}
 .lifebtns .btn.up{color:var(--c-ready)}
 .quick.e2{grid-template-columns:1fr 1fr}
+.mod.sw2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.switch{display:flex;align-items:center;gap:10px;text-align:left;background:var(--felt);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.switch .knob{flex:none;width:38px;height:22px;border-radius:999px;background:var(--felt-3);border:1px solid var(--line);position:relative;transition:background .15s}
+.switch .knob::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.switch[aria-checked="true"] .knob{background:var(--brass);border-color:var(--brass)}
+.switch[aria-checked="true"] .knob::after{transform:translateX(16px);background:var(--brass-ink)}
+.switch span:last-child{display:grid;min-width:0}
+.switch b{font-size:14px;line-height:1.2}
+.switch small{font-size:11.5px;color:var(--muted)}
+@media (max-width:380px){.mod.sw2{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.switch .knob,.switch .knob::after{transition:none}}
 .mini{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
 .mini button{display:flex;align-items:baseline;gap:6px;padding:6px 10px 6px 8px;border-radius:8px;border:1px solid var(--line);border-left:6px solid var(--fr);background:var(--felt-2);font-size:14px}
 .mini button b{font-weight:600}
@@ -300,7 +311,7 @@ let uid=1;const nid=()=>"t"+(Date.now().toString(36))+(uid++);
 /* the parts of a token that define its type (no counts) */
 const typeOf=t=>({name:t.name,p:t.p,t:t.t,col:t.col,text:t.text,art:t.art,creature:t.creature,kw:{...t.kw},bP:t.bP||0,bT:t.bT||0,ench:!!t.ench,emblem:!!t.emblem,...(t.img?{img:t.img}:{}),...(t.frame?{frame:t.frame}:{})});
 const newTok=def=>({...typeOf(def),id:nid(),stacks:[]});
-const fresh=start=>({tokens:[],aP:0,aT:0,eP:0,eT:0,dbl:0,life:start,start,lastAtk:null,log:[],turn:{e:0,d:0,s:0},example:false});
+const fresh=start=>({defAtk:false,tough:false,tokens:[],aP:0,aT:0,eP:0,eT:0,dbl:0,life:start,start,lastAtk:null,log:[],turn:{e:0,d:0,s:0},example:false});
 function example(){
   const P=n=>newTok(PRESETS.find(p=>p.name===n));
   const s=P("Soldier"); s.stacks=[{n:4,tapped:false,sick:false,c:0},{n:3,tapped:true,sick:false,c:0},{n:2,tapped:false,sick:true,c:0},{n:2,tapped:false,sick:false,c:1}];
@@ -309,7 +320,7 @@ function example(){
   return{...fresh(20),tokens:[s,g,tr],aP:1,aT:1,example:true};
 }
 function norm(o){
-  o.eP??=0;o.eT??=0;o.dbl??=0;o.aP??=0;o.aT??=0;o.start??=20;o.life??=o.start;o.log??=[];o.lastAtk??=null;o.turn??={e:0,d:0,s:0};
+  o.defAtk??=false;o.tough??=false;o.eP??=0;o.eT??=0;o.dbl??=0;o.aP??=0;o.aT??=0;o.start??=20;o.life??=o.start;o.log??=[];o.lastAtk??=null;o.turn??={e:0,d:0,s:0};
   o.tokens.forEach(t=>{t.ench??=false;t.emblem??=false;t.kw??=kwFrom(t.text);t.bP??=0;t.bT??=0;t.stacks??=[];t.id??=nid()});
   return o;
 }
@@ -322,7 +333,7 @@ const UKEY="tokenboard.ui.v1";
 let UI=load(UKEY)||{};UI.arr??="mine";UI.buffs??=false;UI.open??={};UI.collapsed??={};
 function saveUI(){try{localStorage.setItem(UKEY,JSON.stringify(UI))}catch(e){}}
 let arranging=false;
-const ARR={mine:"My order",type:"Creatures, then tokens",color:"By color",name:"By name"};
+const ARR={mine:"My order",type:"Creatures, Tokens",color:"By color",name:"By name"};
 const CNAME={W:"White",U:"Blue",B:"Black",R:"Red",G:"Green",M:"Multicolor",C:"Colorless"};
 function displayGroups(){
   const list=[...S.tokens];
@@ -424,16 +435,17 @@ const lethal=(t,s)=>t.creature&&!t.kw.ind&&tg(t,s)>0&&(s.d||0)>0&&s.d>=tg(t,s);
 const dtDead=(t,s)=>t.creature&&!t.kw.ind&&tg(t,s)>0&&s.dt;
 const isDead=(t,s)=>zeroT(t,s)||lethal(t,s)||dtDead(t,s);
 const deadN=t=>t.stacks.filter(s=>isDead(t,s)).reduce((a,s)=>a+s.n,0);
-const isReady=(t,s)=>t.creature&&!t.kw.def&&!s.tapped&&(!s.sick||t.kw.haste)&&!isDead(t,s);
+const dmgOf=(t,s)=>Math.max(0,S.tough?tg(t,s):pw(t,s));
+const isReady=(t,s)=>t.creature&&(!t.kw.def||S.defAtk)&&!s.tapped&&(!s.sick||t.kw.haste)&&!isDead(t,s);
 const readyOf=t=>t.stacks.filter(s=>isReady(t,s));
 const readyN=t=>readyOf(t).reduce((a,s)=>a+s.n,0);
 function totals(){
   let all=0,cre=0,ready=0,rp=0,dead=0;
   for(const t of S.tokens)for(const s of t.stacks){if(t.emblem)continue;all+=s.n;if(!t.creature)continue;cre+=s.n;
-    if(isDead(t,s))dead+=s.n;else if(isReady(t,s)){ready+=s.n;rp+=s.n*Math.max(0,pw(t,s))}}
+    if(isDead(t,s))dead+=s.n;else if(isReady(t,s)){ready+=s.n;rp+=s.n*dmgOf(t,s)}}
   return{all,cre,ready,rp,dead};
 }
-function pick(t,n){const out=[];for(const s of [...readyOf(t)].sort((a,b)=>pw(t,b)-pw(t,a))){if(n<=0)break;const k=Math.min(n,s.n);out.push({s,k});n-=k}return out}
+function pick(t,n){const out=[];for(const s of [...readyOf(t)].sort((a,b)=>dmgOf(t,b)-dmgOf(t,a))){if(n<=0)break;const k=Math.min(n,s.n);out.push({s,k});n-=k}return out}
 function typeLine(t){
   if(t.emblem)return `Emblem — ${t.name}`;
   const parts=[t.art?"Artifact":"",t.ench?"Enchantment":"",t.creature?"Creature":""].filter(Boolean);
@@ -472,6 +484,8 @@ function buffSummary(){const p=[];
   if(S.aP||S.aT)p.push(`Anthem ${sgn(S.aP)}/${sgn(S.aT)}`);
   if(S.eP||S.eT)p.push(`This turn ${sgn(S.eP)}/${sgn(S.eT)}`);
   if(S.dbl)p.push(`Doublers ×${mult()}`);
+  if(S.defAtk)p.push("Defenders attack");
+  if(S.tough)p.push("Toughness damage");
   return p.join(" · ")}
 function setHTML(el,html){if(el.__h===html)return;
   const keep={};el.querySelectorAll("input[id],textarea[id]").forEach(i=>{if(i.type!=="file"&&i.type!=="checkbox")keep[i.id]=i.value});
@@ -494,13 +508,17 @@ function render(){
     <div class="mod"><label>Until end of turn</label>
       <div class="pr"><i>P</i>${stepper("eP","temporary power")}</div>
       <div class="pr"><i>T</i>${stepper("eT","temporary toughness")}</div></div>
+    <div class="mod wide sw2">
+      <button class="switch" data-a="flag" data-k="defAtk" role="switch" aria-checked="${S.defAtk}"><span class="knob"></span><span><b>Defenders can attack</b><small>Felothar, Assault Formation…</small></span></button>
+      <button class="switch" data-a="flag" data-k="tough" role="switch" aria-checked="${S.tough}"><span class="knob"></span><span><b>Damage = toughness</b><small>instead of power</small></span></button>
+    </div>
     <div class="mod wide"><label>Doublers</label><div class="step"><button data-a="dbl" data-v="-1" aria-label="Fewer doublers">−</button><output class="${S.dbl?"on":""}">×${mult()}</output><button data-a="dbl" data-v="1" aria-label="More doublers">+</button></div></div>
   </div>`:""}
   <div class="sum">
     <div><b>${T.all}</b><span>Tokens</span></div>
     <div><b>${T.cre}</b><span>Creatures</span></div>
     <div class="hot"><b>${T.ready}</b><span>Ready</span></div>
-    <div class="hot"><b>${T.rp}</b><span>Ready power</span></div>
+    <div class="hot"><b>${T.rp}</b><span>${S.tough?"Ready damage":"Ready power"}</span></div>
   </div>
   ${T.dead?`<div class="deadbar"><span>${T.dead} token${T.dead>1?"s have":" has"} lethal damage or 0 toughness</span><button data-a="cleandead">Clean up</button></div>`:""}
   ${S.lastAtk?`<div class="atk"><div><span>Attacking with ${S.lastAtk.n}${blockedN(S.lastAtk)?` · ${blockedN(S.lastAtk)} blocked`:""}</span>
@@ -691,7 +709,7 @@ function renderSheet(){
   } else if(sheet.kind==="atk"){
     const rows=S.tokens.filter(t=>readyN(t)>0);
     let n=0,p=0;
-    for(const t of rows)for(const {s,k} of pick(t,sheet.n[t.id]||0)){n+=k;p+=k*Math.max(0,pw(t,s))}
+    for(const t of rows)for(const {s,k} of pick(t,sheet.n[t.id]||0)){n+=k;p+=k*dmgOf(t,s)}
     body=head("Declare attackers",`<button class="ghost" data-a="close">Cancel</button>`)+`
     <div class="row"><button class="ghost" data-a="atkall">All ready</button><button class="ghost" data-a="atknone">None</button></div>
     <div class="stacks">${rows.map(t=>{const r=readyN(t),v=sheet.n[t.id]||0;
@@ -836,7 +854,7 @@ function act(ds,held){
     case"atkall":for(const tk of S.tokens)sheet.n[tk.id]=readyN(tk);break;
     case"atknone":sheet.n={};break;
     case"atkgo":{let n=0,p=0;const att=[];
-      for(const tk of S.tokens){for(const {s,k} of pick(tk,sheet.n[tk.id]||0)){const each=Math.max(0,pw(tk,s));n+=k;p+=k*each;att.push({id:tk.id,name:tk.name,k,p:each,c:s.c,mp:s.mp||0,mt:s.mt||0,tr:!!tk.kw.tr,dth:!!tk.kw.dth});if(!tk.kw.vig){s.n-=k;tk.stacks.push({...s,n:k,tapped:true})}}merge(tk)}
+      for(const tk of S.tokens){for(const {s,k} of pick(tk,sheet.n[tk.id]||0)){const each=dmgOf(tk,s);n+=k;p+=k*each;att.push({id:tk.id,name:tk.name,k,p:each,c:s.c,mp:s.mp||0,mt:s.mt||0,tr:!!tk.kw.tr,dth:!!tk.kw.dth});if(!tk.kw.vig){s.n-=k;tk.stacks.push({...s,n:k,tapped:true})}}merge(tk)}
       S.lastAtk={n,p,att,bl:{},bt:{},x:0};log(`Attacked with ${n} for ${p}`);sheet=null;break}
     case"endturn":for(const tk of S.tokens){tk.stacks.forEach(s=>{s.d=0;s.dt=false});merge(tk)}S.lastAtk=null;S.eP=0;S.eT=0;S.turn={e:0,d:0,s:0};log("End of turn: damage removed, pumps ended");break;
     case"myturn":for(const tk of S.tokens){tk.stacks.forEach(s=>{s.tapped=false;s.sick=false});merge(tk)}S.lastAtk=null;log("My turn: untapped all, summoning sickness gone");break;
@@ -857,6 +875,7 @@ function act(ds,held){
     case"edit":sheet={kind:"edit",id:sheet.id};break;
     case"editback":sheet={kind:"tok",id:sheet.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};break;
     case"lifesheet":sheet={kind:"life"};break;
+    case"flag":S[ds.k]=!S[ds.k];log(`${ds.k==="tough"?"Combat damage uses toughness":"Defenders can attack"}: ${S[ds.k]?"on":"off"}`);break;
     case"grp":UI.collapsed[ds.k]=!UI.collapsed[ds.k];saveUI();break;
     case"buffs":UI.buffs=!UI.buffs;saveUI();break;
     case"sect":UI.open[ds.k]=!UI.open[ds.k];saveUI();break;
