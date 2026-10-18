@@ -151,8 +151,15 @@ textarea{min-height:56px;resize:vertical}
 .arr{display:flex;align-items:center;gap:8px}
 .arr select{width:auto;padding:6px 8px}
 .ghost.on{border-color:var(--brass);color:var(--brass);font-weight:600}
-.gh{grid-column:1/-1;display:flex;gap:10px;align-items:center;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:4px}
-.gh::after{content:"";flex:1;height:1px;background:var(--line)}
+.gh{grid-column:1/-1;display:flex;gap:10px;align-items:center;justify-content:space-between;background:none;border:0;border-bottom:1px solid var(--line);padding:8px 2px 6px;width:100%;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:4px}
+.gh i{font-style:normal;color:var(--brass);font-weight:600;letter-spacing:0;text-transform:none;font-size:13px}
+.mini{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.mini button{display:flex;align-items:baseline;gap:6px;padding:6px 10px 6px 8px;border-radius:8px;border:1px solid var(--line);border-left:6px solid var(--fr);background:var(--felt-2);font-size:14px}
+.mini button b{font-weight:600}
+.mini button span{font-weight:700;font-variant-numeric:tabular-nums}
+.mini button em{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.mini button small{color:var(--c-ready);font-size:12px}
+.mini button.gone{filter:grayscale(1);opacity:.6}
 .movebar{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .movebar button{height:38px;border-radius:8px;border:1px dashed var(--brass);background:var(--felt-2);color:var(--brass);font-weight:700;font-size:14px}
 .movebar button:disabled{opacity:.3;cursor:default}
@@ -303,7 +310,7 @@ S=S&&Array.isArray(S.tokens)?norm(S):example();
 let D=load(DKEY);if(!Array.isArray(D))D=[];
 /* per-phone view settings: board arrangement, open panels */
 const UKEY="tokenboard.ui.v1";
-let UI=load(UKEY)||{};UI.arr??="mine";UI.buffs??=false;UI.open??={};
+let UI=load(UKEY)||{};UI.arr??="mine";UI.buffs??=false;UI.open??={};UI.collapsed??={};
 function saveUI(){try{localStorage.setItem(UKEY,JSON.stringify(UI))}catch(e){}}
 let arranging=false;
 const ARR={mine:"My order",type:"Creatures, then others",color:"By color",name:"By name"};
@@ -492,7 +499,10 @@ function render(){
   </div>
   ${arranging?`<div class="note">Use the arrows to move tokens. ${UI.arr==="type"||UI.arr==="color"?"Tokens move within their group.":""}</div>`:""}
   <div class="grid">
-    ${displayGroups().map(g=>(g.h?`<div class="gh">${esc(g.h)} · ${g.items.reduce((a,t)=>a+cnt(t),0)}</div>`:"")+g.items.map((t,i)=>`<div class="slot${arranging?" arranging":""}">${cardHTML(t)}
+    ${displayGroups().map(g=>{const ck=UI.arr+":"+g.h,shut=g.h&&UI.collapsed[ck]&&!arranging;
+      const head=g.h?`<button class="gh" data-a="grp" data-k="${esc(ck)}" aria-expanded="${!shut}"><span>${esc(g.h)} · ${g.items.reduce((a,t)=>a+cnt(t),0)}</span><i>${shut?"Show ▼":"Hide ▲"}</i></button>`:"";
+      if(shut)return head+`<div class="mini">${g.items.map(t=>`<button data-a="open" data-id="${t.id}" class="${cnt(t)?"":"gone"}" style="--fr:${t.frame||(COLORS[t.col]||COLORS.C).fr}"><b>${esc(t.name)}</b><span>×${cnt(t)}</span>${t.creature?`<em>${ptStr(t,0)}</em>`:""}${readyN(t)?`<small>${readyN(t)} ready</small>`:""}</button>`).join("")}</div>`;
+      return head+g.items.map((t,i)=>`<div class="slot${arranging?" arranging":""}">${cardHTML(t)}
       <div class="chips">${chipsHTML(t)}</div>
       ${arranging?`<div class="movebar">
         <button data-a="mv" data-id="${t.id}" data-v="-1" ${i===0?"disabled":""} aria-label="Move ${esc(t.name)} earlier">◀ Earlier</button>
@@ -502,7 +512,7 @@ function render(){
           :`<button data-a="sac1" data-id="${t.id}" data-rep ${cnt(t)?"":"disabled"} aria-label="Sacrifice one ${esc(t.name)}">Sac</button>`}
         <button data-a="tap1" data-id="${t.id}" data-rep ${t.stacks.some(s=>!s.tapped)?"":"disabled"}>Tap</button>
         <button class="mk" data-a="mk1" data-id="${t.id}" data-rep>+${mult()}</button>
-      </div>`}</div>`).join("")).join("")}
+      </div>`}</div>`).join("")}).join("")}
     ${arranging?"":`<button class="add" data-a="addsheet"><div><span>+</span>Add token</div></button>`}
   </div>
   ${saveFailed?`<div class="warnline">Your phone's browser storage is full, so changes won't survive a reload. Remove some photos, then make a backup.</div>`:""}`);
@@ -772,7 +782,7 @@ function applyOp(t,op){
 }
 
 /* actions that only change what's on screen, not the board */
-const VIEW=new Set(["buffs","sect","arrange","open","addsheet","close","sel","amt","amtAll","undo","atkopen","atkset","atkmax","atkall","atknone","edit","editback","menu","decks","logsheet","backup","bkcopy","bksave","bkphotos","deckdel","colors","theme","accent","accentreset","dmgamt","dttog","blkopen","bon","ecamt","install"]);
+const VIEW=new Set(["grp","buffs","sect","arrange","open","addsheet","close","sel","amt","amtAll","undo","atkopen","atkset","atkmax","atkall","atknone","edit","editback","menu","decks","logsheet","backup","bkcopy","bksave","bkphotos","deckdel","colors","theme","accent","accentreset","dmgamt","dttog","blkopen","bon","ecamt","install"]);
 function act(ds,held){
   const a=ds.a,t=S.tokens.find(x=>x.id===ds.id);
   if(!held&&!VIEW.has(a)&&!(a==="reset"&&!pendingReset)&&!(a==="deltype"&&!pendingDel)&&!(a==="bkrestore"&&!pendingRestore))snap();
@@ -821,6 +831,7 @@ function act(ds,held){
     case"dmgamt":sheet.dmg=Math.max(1,Math.min(99,(sheet.dmg||1)+ +ds.v));break;
     case"edit":sheet={kind:"edit",id:sheet.id};break;
     case"editback":sheet={kind:"tok",id:sheet.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};break;
+    case"grp":UI.collapsed[ds.k]=!UI.collapsed[ds.k];saveUI();break;
     case"buffs":UI.buffs=!UI.buffs;saveUI();break;
     case"sect":UI.open[ds.k]=!UI.open[ds.k];saveUI();break;
     case"arrange":arranging=!arranging;if(arranging)sheet=null;break;
