@@ -139,6 +139,31 @@ textarea{min-height:56px;resize:vertical}
 .pastebox{font-size:14px;border-style:dashed}
 .ghost:disabled{opacity:.35;cursor:default}
 .mods{grid-template-columns:repeat(2,minmax(0,1fr))}
+.topbar{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px}
+.lifebox{background:var(--felt-2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;display:grid;gap:2px}
+.lifebox .step{gap:10px}
+.buffbtn{display:grid;gap:2px;align-content:center;text-align:left;background:var(--felt-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:0}
+.buffbtn .bline{display:flex;align-items:center;gap:8px;min-width:0}
+.buffbtn .bsum{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;color:var(--muted)}
+.buffbtn .bsum.on{color:var(--brass)}
+.buffbtn i{font-style:normal;color:var(--muted);font-size:13px;flex:none}
+.toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.arr{display:flex;align-items:center;gap:8px}
+.arr select{width:auto;padding:6px 8px}
+.ghost.on{border-color:var(--brass);color:var(--brass);font-weight:600}
+.gh{grid-column:1/-1;display:flex;gap:10px;align-items:center;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:4px}
+.gh::after{content:"";flex:1;height:1px;background:var(--line)}
+.movebar{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.movebar button{height:38px;border-radius:8px;border:1px dashed var(--brass);background:var(--felt-2);color:var(--brass);font-weight:700;font-size:14px}
+.movebar button:disabled{opacity:.3;cursor:default}
+.slot.arranging .card{outline:2px dashed var(--brass);outline-offset:3px}
+.secbtn{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--felt);font-weight:600;text-align:left}
+.secbtn small{color:var(--muted);font-weight:500}
+.secbtn i{font-style:normal;color:var(--brass);font-size:20px;line-height:1;flex:none}
+.secbody{display:grid;gap:10px;padding:0 2px 4px}
+.frames{display:flex;flex-wrap:wrap;gap:8px}
+.frames button{width:34px;height:34px;border-radius:8px;border:2px solid var(--line)}
+.frames button.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--brass)}
 .mod.wide{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .mod.wide .step{width:150px}
 .pr{display:grid;grid-template-columns:1.1em 1fr;align-items:center;gap:4px}
@@ -257,7 +282,7 @@ const PRESETS=[
 const KEY="tokenboard.v1",DKEY="tokenboard.decks.v1";
 let uid=1;const nid=()=>"t"+(Date.now().toString(36))+(uid++);
 /* the parts of a token that define its type (no counts) */
-const typeOf=t=>({name:t.name,p:t.p,t:t.t,col:t.col,text:t.text,art:t.art,creature:t.creature,kw:{...t.kw},bP:t.bP||0,bT:t.bT||0,...(t.img?{img:t.img}:{})});
+const typeOf=t=>({name:t.name,p:t.p,t:t.t,col:t.col,text:t.text,art:t.art,creature:t.creature,kw:{...t.kw},bP:t.bP||0,bT:t.bT||0,...(t.img?{img:t.img}:{}),...(t.frame?{frame:t.frame}:{})});
 const newTok=def=>({...typeOf(def),id:nid(),stacks:[]});
 const fresh=start=>({tokens:[],aP:0,aT:0,eP:0,eT:0,dbl:0,life:start,start,lastAtk:null,log:[],turn:{e:0,d:0,s:0},example:false});
 function example(){
@@ -276,6 +301,28 @@ const load=(k)=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return 
 let S=load(KEY);
 S=S&&Array.isArray(S.tokens)?norm(S):example();
 let D=load(DKEY);if(!Array.isArray(D))D=[];
+/* per-phone view settings: board arrangement, open panels */
+const UKEY="tokenboard.ui.v1";
+let UI=load(UKEY)||{};UI.arr??="mine";UI.buffs??=false;UI.open??={};
+function saveUI(){try{localStorage.setItem(UKEY,JSON.stringify(UI))}catch(e){}}
+let arranging=false;
+const ARR={mine:"My order",type:"Creatures, then others",color:"By color",name:"By name"};
+const CNAME={W:"White",U:"Blue",B:"Black",R:"Red",G:"Green",M:"Multicolor",C:"Colorless"};
+function displayGroups(){
+  const list=[...S.tokens];
+  if(UI.arr==="type")return [{h:"Creatures",items:list.filter(t=>t.creature)},{h:"Other tokens",items:list.filter(t=>!t.creature)}].filter(g=>g.items.length);
+  if(UI.arr==="color")return "WUBRGMC".split("").map(c=>({h:CNAME[c],items:list.filter(t=>(t.col||"C")===c)})).filter(g=>g.items.length);
+  if(UI.arr==="name")return [{h:null,items:list.sort((a,b)=>a.name.localeCompare(b.name))}];
+  return [{h:null,items:list}];
+}
+/* swap a token with its neighbour as shown on screen; returns false at the edge of its group */
+function moveTok(id,dir){
+  for(const g of displayGroups()){const i=g.items.findIndex(t=>t.id===id);if(i<0)continue;
+    const j=i+dir;if(j<0||j>=g.items.length)return false;
+    const a=S.tokens.indexOf(g.items[i]),b=S.tokens.indexOf(g.items[j]);[S.tokens[a],S.tokens[b]]=[S.tokens[b],S.tokens[a]];return true}
+  return false;
+}
+const FRAMES=["#d9d2b4","#7fa9cc","#6e6767","#cf7b5e","#7da77a","#a9adb6","#cdb36a","#b8923a","#c6c9cf","#2e2c30","#c9879a","#5fa8a0","#8d6fb8","#d98c3f"];
 
 /* ---------- color themes (kept separately; not affected by undo or New game) ---------- */
 const THEMES={
@@ -379,7 +426,7 @@ function abilityText(t){
 function cardHTML(t){
   const c=COLORS[t.col]||COLORS.C,n=cnt(t),txt=abilityText(t);
   const buffed=t.creature&&(bufP(t)||bufT(t)),dead=t.creature&&t.t+bufT(t)<=0;
-  return `<button class="card${n?"":" gone"}" data-a="open" data-id="${t.id}" aria-label="${esc(t.name)}, ${n} in play" style="--fr:${c.fr};--art:${artBg(t)}">
+  return `<button class="card${n?"":" gone"}" data-a="open" data-id="${t.id}" aria-label="${esc(t.name)}, ${n} in play" style="--fr:${t.frame||c.fr};--art:${artBg(t)}">
     <div class="frame">
       <div class="nm">${esc(t.name)}</div>
       <div class="art${t.img?" ph":""}"><div class="ct"><small>×</small>${n}</div></div>
@@ -400,6 +447,11 @@ function chipsHTML(t){
 }
 const stepper=(k,label,a="mod")=>`<div class="step"><button data-a="${a}" data-k="${k}" data-v="-1" data-rep aria-label="Lower ${label}">−</button><output class="${S[k]?"on":""}">${sgn(S[k])}</output><button data-a="${a}" data-k="${k}" data-v="1" data-rep aria-label="Raise ${label}">+</button></div>`;
 
+function buffSummary(){const p=[];
+  if(S.aP||S.aT)p.push(`Anthem ${sgn(S.aP)}/${sgn(S.aT)}`);
+  if(S.eP||S.eT)p.push(`This turn ${sgn(S.eP)}/${sgn(S.eT)}`);
+  if(S.dbl)p.push(`Doublers ×${mult()}`);
+  return p.join(" · ")}
 function setHTML(el,html){if(el.__h===html)return;
   const keep={};el.querySelectorAll("input[id],textarea[id]").forEach(i=>{if(i.type!=="file"&&i.type!=="checkbox")keep[i.id]=i.value});
   el.innerHTML=html;el.__h=html;
@@ -410,16 +462,19 @@ function render(){
   setHTML(document.getElementById("app"),`
   <header><h1>Token Board</h1><button class="ghost" data-a="menu">Menu</button></header>
   ${S.example?`<div class="note">Example board loaded. Moving over from the old version? Menu → Backup & restore. Otherwise start fresh from Menu → New game.</div>`:""}
-  <div class="mods">
+  <div class="topbar">
+    <div class="lifebox"><span class="sec">Life</span><div class="step"><button data-a="life" data-v="-1" data-rep aria-label="Lose life">−</button><output class="life">${S.life}</output><button data-a="life" data-v="1" data-rep aria-label="Gain life">+</button></div></div>
+    <button class="buffbtn" data-a="buffs" aria-expanded="${UI.buffs}"><span class="sec">Buffs</span><span class="bline"><span class="bsum${buffSummary()?" on":""}">${buffSummary()||"None active"}</span><i>${UI.buffs?"Hide ▲":"Show ▼"}</i></span></button>
+  </div>
+  ${UI.buffs?`<div class="mods">
     <div class="mod"><label>Anthem · all creatures</label>
       <div class="pr"><i>P</i>${stepper("aP","anthem power")}</div>
       <div class="pr"><i>T</i>${stepper("aT","anthem toughness")}</div></div>
     <div class="mod"><label>Until end of turn</label>
       <div class="pr"><i>P</i>${stepper("eP","temporary power")}</div>
       <div class="pr"><i>T</i>${stepper("eT","temporary toughness")}</div></div>
-    <div class="mod"><label>Life</label><div class="step"><button data-a="life" data-v="-1" data-rep aria-label="Lose life">−</button><output class="life">${S.life}</output><button data-a="life" data-v="1" data-rep aria-label="Gain life">+</button></div></div>
-    <div class="mod"><label>Doublers</label><div class="step"><button data-a="dbl" data-v="-1" aria-label="Fewer doublers">−</button><output class="${S.dbl?"on":""}">×${mult()}</output><button data-a="dbl" data-v="1" aria-label="More doublers">+</button></div></div>
-  </div>
+    <div class="mod wide"><label>Doublers</label><div class="step"><button data-a="dbl" data-v="-1" aria-label="Fewer doublers">−</button><output class="${S.dbl?"on":""}">×${mult()}</output><button data-a="dbl" data-v="1" aria-label="More doublers">+</button></div></div>
+  </div>`:""}
   <div class="sum">
     <div><b>${T.all}</b><span>Tokens</span></div>
     <div><b>${T.cre}</b><span>Creatures</span></div>
@@ -431,16 +486,24 @@ function render(){
       ${S.lastAtk.att?`<button class="atkbtn" data-a="blkopen">Mark blocked</button>`:""}</div><b>${atkDamage(S.lastAtk)} dmg</b></div>`:""}
   ${S.turn.e||S.turn.d||S.turn.s?`<div class="turnline"><span class="sec">This turn</span><span><b>${S.turn.e}</b> entered</span><span><b>${S.turn.d}</b> died</span><span><b>${S.turn.s}</b> sacrificed</span></div>`:""}
   ${last?`<button class="lastlog" data-a="logsheet"><span>${esc(last.m)}</span><em>Log</em></button>`:""}
+  <div class="toolbar">
+    <label class="arr"><span class="sec">Show</span><select id="arr" aria-label="Arrange tokens">${Object.entries(ARR).map(([k,v])=>`<option value="${k}"${UI.arr===k?" selected":""}>${v}</option>`).join("")}</select></label>
+    ${S.tokens.length>1?`<button class="ghost${arranging?" on":""}" data-a="arrange" ${UI.arr==="name"?"disabled":""}>${arranging?"Done arranging":"Rearrange"}</button>`:""}
+  </div>
+  ${arranging?`<div class="note">Use the arrows to move tokens. ${UI.arr==="type"||UI.arr==="color"?"Tokens move within their group.":""}</div>`:""}
   <div class="grid">
-    ${S.tokens.map(t=>`<div class="slot">${cardHTML(t)}
+    ${displayGroups().map(g=>(g.h?`<div class="gh">${esc(g.h)} · ${g.items.reduce((a,t)=>a+cnt(t),0)}</div>`:"")+g.items.map((t,i)=>`<div class="slot${arranging?" arranging":""}">${cardHTML(t)}
       <div class="chips">${chipsHTML(t)}</div>
-      <div class="quick">
+      ${arranging?`<div class="movebar">
+        <button data-a="mv" data-id="${t.id}" data-v="-1" ${i===0?"disabled":""} aria-label="Move ${esc(t.name)} earlier">◀ Earlier</button>
+        <button data-a="mv" data-id="${t.id}" data-v="1" ${i===g.items.length-1?"disabled":""} aria-label="Move ${esc(t.name)} later">Later ▶</button></div>`
+      :`<div class="quick">
         ${t.creature?`<button data-a="rm1" data-id="${t.id}" data-rep ${cnt(t)?"":"disabled"} aria-label="Remove one ${esc(t.name)}">−1</button>`
           :`<button data-a="sac1" data-id="${t.id}" data-rep ${cnt(t)?"":"disabled"} aria-label="Sacrifice one ${esc(t.name)}">Sac</button>`}
         <button data-a="tap1" data-id="${t.id}" data-rep ${t.stacks.some(s=>!s.tapped)?"":"disabled"}>Tap</button>
         <button class="mk" data-a="mk1" data-id="${t.id}" data-rep>+${mult()}</button>
-      </div></div>`).join("")}
-    <button class="add" data-a="addsheet"><div><span>+</span>Add token</div></button>
+      </div>`}</div>`).join("")).join("")}
+    ${arranging?"":`<button class="add" data-a="addsheet"><div><span>+</span>Add token</div></button>`}
   </div>
   ${saveFailed?`<div class="warnline">Your phone's browser storage is full, so changes won't survive a reload. Remove some photos, then make a backup.</div>`:""}`);
   setHTML(document.getElementById("bar"),`<div class="in">
@@ -525,6 +588,8 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 try{navigator.storage?.persist?.()}catch(e){}
 
+/* collapsible section inside a sheet; open state is remembered per phone */
+const sect=(k,title,hint,inner)=>`<button class="secbtn" data-a="sect" data-k="${k}" aria-expanded="${!!UI.open[k]}"><span>${title}${hint?` <small>${hint}</small>`:""}</span><i>${UI.open[k]?"−":"+"}</i></button>${UI.open[k]?`<div class="secbody">${inner}</div>`:""}`;
 /* ---------- sheets ---------- */
 let sheet=null,pendingDel=false,pendingReset=false,pendingDeck=null,pendingRestore=false,openKey=null,pendingImg=null;
 function renderSheet(){
@@ -552,33 +617,44 @@ function renderSheet(){
     ${st?`<div class="acts">
       <button class="btn" data-a="op" data-op="tap">Tap ${sheet.amt}</button>
       <button class="btn" data-a="op" data-op="untap">Untap ${sheet.amt}</button>
-      ${t.creature?`<button class="btn" data-a="op" data-op="plus">+1/+1 on ${sheet.amt}</button>
-      <button class="btn" data-a="op" data-op="minus">−1/−1 on ${sheet.amt}</button>`:""}
-      ${t.creature?`<div class="bonusrow"><span class="sec">Other bonus each · equipment, +1/+0 counters</span>
-        <div class="pr"><i>P</i><div class="step"><button data-a="bon" data-k="bp" data-v="-1" data-rep aria-label="Lower power bonus">−</button><output class="${sheet.bp?"on":""}">${sgn(sheet.bp)}</output><button data-a="bon" data-k="bp" data-v="1" data-rep aria-label="Raise power bonus">+</button></div></div>
-        <div class="pr"><i>T</i><div class="step"><button data-a="bon" data-k="bt" data-v="-1" data-rep aria-label="Lower toughness bonus">−</button><output class="${sheet.bt?"on":""}">${sgn(sheet.bt)}</output><button data-a="bon" data-k="bt" data-v="1" data-rep aria-label="Raise toughness bonus">+</button></div></div>
-        <button class="btn" data-a="op" data-op="bonus" ${sheet.bp||sheet.bt?"":"disabled"}>Give ${sgn(sheet.bp)}/${sgn(sheet.bt)} to ${sheet.amt}</button></div>`:""}
-      ${t.creature?`<div class="dmgrow"><span class="sec">Damage each</span>
-        <div class="step"><button data-a="dmgamt" data-v="-1" data-rep aria-label="Less damage">−</button><output>${sheet.dmg}</output><button data-a="dmgamt" data-v="1" data-rep aria-label="More damage">+</button></div>
-        <button class="btn" data-a="op" data-op="dmg">Deal ${sheet.dmg} to ${sheet.amt}</button>
-        <button class="ghost${sheet.dt?" on":""}" data-a="dttog" aria-pressed="${!!sheet.dt}">Deathtouch source: ${sheet.dt?"on":"off"}</button></div>`:""}
       <button class="btn" data-a="op" data-op="sac">Sacrifice ${sheet.amt}</button>
       <button class="btn" data-a="op" data-op="remove">Remove ${sheet.amt}</button>
     </div>`:""}
-    ${t.creature?`<div class="amt"><span class="sec">Enters with</span>
-      <div class="step"><button data-a="ecamt" data-v="-1" data-rep aria-label="Fewer counters">−</button><output class="${sheet.ec?"on":""}">${sheet.ec}</output><button data-a="ecamt" data-v="1" data-rep aria-label="More counters">+</button></div>
-      <span class="note">+1/+1 counters each</span></div>`:""}
     <button class="btn pri" data-a="make">Make ${sheet.amt}${S.dbl?` → ${sheet.amt*mult()} with doublers`:""}${sheet.ec&&t.creature?` with ${sheet.ec} counter${sheet.ec>1?"s":""}`:""}</button>
-    ${t.creature?`<div class="mod"><label>Type buff · lords that pump only ${esc(t.name)}</label>
+    ${t.creature?sect("ctr","Counters & bonuses",sheet.ec?`new ones enter with ${sheet.ec}`:"",`
+      ${st?`<div class="acts">
+        <button class="btn" data-a="op" data-op="plus">+1/+1 on ${sheet.amt}</button>
+        <button class="btn" data-a="op" data-op="minus">−1/−1 on ${sheet.amt}</button></div>
+      <div class="bonusrow"><span class="sec">Other bonus each · equipment, +1/+0 counters</span>
+        <div class="pr"><i>P</i><div class="step"><button data-a="bon" data-k="bp" data-v="-1" data-rep aria-label="Lower power bonus">−</button><output class="${sheet.bp?"on":""}">${sgn(sheet.bp)}</output><button data-a="bon" data-k="bp" data-v="1" data-rep aria-label="Raise power bonus">+</button></div></div>
+        <div class="pr"><i>T</i><div class="step"><button data-a="bon" data-k="bt" data-v="-1" data-rep aria-label="Lower toughness bonus">−</button><output class="${sheet.bt?"on":""}">${sgn(sheet.bt)}</output><button data-a="bon" data-k="bt" data-v="1" data-rep aria-label="Raise toughness bonus">+</button></div></div>
+        <button class="btn" data-a="op" data-op="bonus" ${sheet.bp||sheet.bt?"":"disabled"}>Give ${sgn(sheet.bp)}/${sgn(sheet.bt)} to ${sheet.amt}</button></div>`:""}
+      <div class="amt"><span class="sec">New tokens enter with</span>
+        <div class="step"><button data-a="ecamt" data-v="-1" data-rep aria-label="Fewer counters">−</button><output class="${sheet.ec?"on":""}">${sheet.ec}</output><button data-a="ecamt" data-v="1" data-rep aria-label="More counters">+</button></div>
+        <span class="note">+1/+1 counters each</span></div>`):""}
+    ${t.creature&&st?sect("dmg","Damage",t.stacks.some(s=>s.d)?"some damage marked":"",`
+      <div class="dmgrow"><span class="sec">Damage each</span>
+        <div class="step"><button data-a="dmgamt" data-v="-1" data-rep aria-label="Less damage">−</button><output>${sheet.dmg}</output><button data-a="dmgamt" data-v="1" data-rep aria-label="More damage">+</button></div>
+        <button class="btn" data-a="op" data-op="dmg">Deal ${sheet.dmg} to ${sheet.amt}</button>
+        <button class="ghost${sheet.dt?" on":""}" data-a="dttog" aria-pressed="${!!sheet.dt}">Deathtouch source: ${sheet.dt?"on":"off"}</button></div>`):""}
+    ${t.creature?sect("lord",`Type buff · only ${esc(t.name)}`,(t.bP||t.bT)?`${sgn(t.bP||0)}/${sgn(t.bT||0)}`:"",`
+      <div class="mod">
       <div class="pr"><i>P</i><div class="step"><button data-a="tmod" data-k="bP" data-v="-1" data-rep aria-label="Lower type power">−</button><output class="${t.bP?"on":""}">${sgn(t.bP||0)}</output><button data-a="tmod" data-k="bP" data-v="1" data-rep aria-label="Raise type power">+</button></div></div>
-      <div class="pr"><i>T</i><div class="step"><button data-a="tmod" data-k="bT" data-v="-1" data-rep aria-label="Lower type toughness">−</button><output class="${t.bT?"on":""}">${sgn(t.bT||0)}</output><button data-a="tmod" data-k="bT" data-v="1" data-rep aria-label="Raise type toughness">+</button></div></div></div>`:""}
-    <div class="acts"><button class="btn" data-a="edit">Edit card</button><button class="btn" data-a="dup">Copy as new type</button></div>
-    <p class="sec">Card image</p>
-    <div class="thumb"><div class="pv" style="background:${artBg(t)}"></div>
-      <div class="row"><label class="ghost filebtn">${t.img?"Change photo":"Add photo"}<input id="tok-img" type="file" accept="image/*"></label>
-      ${t.img?`<button class="ghost" data-a="rmimg">Remove photo</button>`:""}</div></div>
-    <input id="tok-paste" class="pastebox" placeholder="Or long-press here and paste a copied image" aria-label="Paste an image">
-    <button class="ghost${pendingDel?" warn":""}" data-a="deltype">${pendingDel?"Tap again to remove this token type":"Remove token type"}</button>`;
+      <div class="pr"><i>T</i><div class="step"><button data-a="tmod" data-k="bT" data-v="-1" data-rep aria-label="Lower type toughness">−</button><output class="${t.bT?"on":""}">${sgn(t.bT||0)}</output><button data-a="tmod" data-k="bT" data-v="1" data-rep aria-label="Raise type toughness">+</button></div></div></div>
+      <div class="note">For lords and effects that pump only this kind of token.</div>`):""}
+    ${sect("look","Card look",[t.frame?"custom frame":"",t.img?"photo":""].filter(Boolean).join(", "),`
+      <span class="sec">Frame color</span>
+      <div class="frames">${FRAMES.map(c=>`<button data-a="frame" data-v="${c}" class="${(t.frame||"").toLowerCase()===c?"on":""}" style="background:${c}" aria-label="Frame color ${c}"></button>`).join("")}</div>
+      <div class="pick"><label class="chk">Any color <input id="frame-pick" type="color" value="${t.frame||(COLORS[t.col]||COLORS.C).fr}"></label>
+        ${t.frame?`<button class="ghost" data-a="framereset">Use ${CNAME[t.col]||"mana"} color</button>`:""}</div>
+      <span class="sec">Card image</span>
+      <div class="thumb"><div class="pv" style="background:${artBg(t)}"></div>
+        <div class="row"><label class="ghost filebtn">${t.img?"Change photo":"Add photo"}<input id="tok-img" type="file" accept="image/*"></label>
+        ${t.img?`<button class="ghost" data-a="rmimg">Remove photo</button>`:""}</div></div>
+      <input id="tok-paste" class="pastebox" placeholder="Or long-press here and paste a copied image" aria-label="Paste an image">`)}
+    ${sect("card","Edit, copy or remove","",`
+      <div class="acts"><button class="btn" data-a="edit">Edit card</button><button class="btn" data-a="dup">Copy as new type</button></div>
+      <button class="ghost${pendingDel?" warn":""}" data-a="deltype">${pendingDel?"Tap again to remove this token type":"Remove token type"}</button>`)}`;
   } else if(sheet.kind==="edit"){
     const t=S.tokens.find(x=>x.id===sheet.id);if(!t){sheet=null;L.innerHTML="";openKey=null;return}
     body=head(`Edit ${esc(t.name)}`,`<button class="ghost" data-a="editback">Cancel</button>`)+`
@@ -696,7 +772,7 @@ function applyOp(t,op){
 }
 
 /* actions that only change what's on screen, not the board */
-const VIEW=new Set(["open","addsheet","close","sel","amt","amtAll","undo","atkopen","atkset","atkmax","atkall","atknone","edit","editback","menu","decks","logsheet","backup","bkcopy","bksave","bkphotos","deckdel","colors","theme","accent","accentreset","dmgamt","dttog","blkopen","bon","ecamt","install"]);
+const VIEW=new Set(["buffs","sect","arrange","open","addsheet","close","sel","amt","amtAll","undo","atkopen","atkset","atkmax","atkall","atknone","edit","editback","menu","decks","logsheet","backup","bkcopy","bksave","bkphotos","deckdel","colors","theme","accent","accentreset","dmgamt","dttog","blkopen","bon","ecamt","install"]);
 function act(ds,held){
   const a=ds.a,t=S.tokens.find(x=>x.id===ds.id);
   if(!held&&!VIEW.has(a)&&!(a==="reset"&&!pendingReset)&&!(a==="deltype"&&!pendingDel)&&!(a==="bkrestore"&&!pendingRestore))snap();
@@ -745,6 +821,12 @@ function act(ds,held){
     case"dmgamt":sheet.dmg=Math.max(1,Math.min(99,(sheet.dmg||1)+ +ds.v));break;
     case"edit":sheet={kind:"edit",id:sheet.id};break;
     case"editback":sheet={kind:"tok",id:sheet.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};break;
+    case"buffs":UI.buffs=!UI.buffs;saveUI();break;
+    case"sect":UI.open[ds.k]=!UI.open[ds.k];saveUI();break;
+    case"arrange":arranging=!arranging;if(arranging)sheet=null;break;
+    case"mv":if(!moveTok(ds.id,+ds.v))hist.pop();break;
+    case"frame":{const tk=tok();if(tk)tk.frame=ds.v;break}
+    case"framereset":{const tk=tok();if(tk)delete tk.frame;break}
     case"dup":{const tk=tok(),c=newTok(tk);S.tokens.splice(S.tokens.indexOf(tk)+1,0,c);log(`Copied ${tk.name} as a new type`);sheet={kind:"tok",id:c.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};break}
     case"addsheet":sheet={kind:"add"};break;
     case"menu":sheet={kind:"menu"};break;
@@ -847,6 +929,8 @@ async function useImage(forCustom,file){
 }
 document.addEventListener("change",e=>{
   const el=e.target;
+  if(el.id==="arr"){UI.arr=el.value;saveUI();if(UI.arr==="name")arranging=false;render();return}
+  if(el.id==="frame-pick"){const tk=S.tokens.find(x=>x.id===sheet?.id);if(tk){snap();tk.frame=el.value;render()}return}
   if(el.id==="acc-pick"){render();return}
   if(el.id==="bk-file"){const f=el.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById("bk-in").value=r.result;sheet.err="";render()};r.readAsText(f);return}
   if(el.id!=="tok-img"&&el.id!=="cf-img")return;
