@@ -500,7 +500,7 @@ const FEAT=[
   ["Feel","rmotion","Reduce motion","Fades instead of movement",false]];
 UI.f??={};for(const f of FEAT)UI.f[f[1]]??=f[4];
 const F=k=>UI.f[k]!==false;
-const APPV="15";
+const APPV="16";
 function saveUI(){try{localStorage.setItem(UKEY,JSON.stringify(UI))}catch(e){}}
 let arranging=false;
 const ARR={mine:"My order",type:"Creatures, Tokens",color:"By color",name:"By name"};
@@ -940,9 +940,11 @@ async function loadVersions(t){VS.id=t.id;VS.items=[];VS.busy=true;VS.close=fals
     VS.busy=false;VS.msg=VS.items.length?`${VS.items.length} version${VS.items.length>1?"s":""}${VS.close?" of similar tokens (none matched this one exactly)":""}.`:"No Scryfall versions found for this token.";
   }catch(e){VS.busy=false;VS.msg=e.message==="offline"?"You're offline. Card versions need internet.":"Couldn't reach Scryfall right now. Try again in a moment."}
   if(sheet?.kind==="vers")render()}
+/* a token's creature types: its name for normal tokens, the copied card's subtypes for copies */
+const tokTypes=t=>t.copyOf&&t.ctype?(t.ctype.split("—")[1]||"").trim().split(/\s+/).filter(Boolean):t.name.split(/\s+/);
 /* ---------- board-wide counters ---------- */
-const typeWords=()=>[...new Set(S.tokens.filter(t=>t.creature&&!t.emblem&&cnt(t)).flatMap(t=>t.name.split(/\s+/).filter(w=>/^[A-Z][a-z'-]+$/.test(w))))].sort();
-const cfMatch=t=>t.creature&&!t.emblem&&(!UI.cf||t.name.split(/\s+/).includes(UI.cf));
+const typeWords=()=>[...new Set(S.tokens.filter(t=>t.creature&&!t.emblem&&cnt(t)).flatMap(t=>tokTypes(t).filter(w=>/^[A-Z][a-z'-]+$/.test(w))))].sort();
+const cfMatch=t=>t.creature&&!t.emblem&&(!UI.cf||tokTypes(t).includes(UI.cf));
 function counterEach(v){let n=0;for(const t of S.tokens){if(!cfMatch(t))continue;for(const st of t.stacks)if(st.n>0){st.c+=v;n+=st.n}merge(t)}
   log(`${v>0?"+1/+1":"−1/−1"} counter on each ${UI.cf||"creature"} token (${n})`);return n}
 function prolifRows(){const rows=[];
@@ -988,7 +990,7 @@ function evTriggers(p){const key=p.name+"\u0000"+(p.text||"");if(EV_MEMO.has(key
     else return;
     out.push({i,kind,cond,eff:m[3],...parseSubj(subj,p,rest)})});
   EV_MEMO.set(key,out);return out}
-function objInfo(o){if(o.t){const t=o.t;return {token:true,cre:!!t.creature,art:!!t.art,ench:!!t.ench,land:false,pw:false,subt:t.name.toLowerCase().split(/\s+/),col:t.col,colKnown:true}}
+function objInfo(o){if(o.t){const t=o.t,ct=(t.ctype||"").toLowerCase();return {token:true,cre:!!t.creature,art:!!t.art||/artifact/.test(ct),ench:!!t.ench||/enchantment/.test(ct),land:/\bland\b/.test(ct),pw:/planeswalker/.test(ct),subt:tokTypes(t).map(w=>w.toLowerCase()),col:t.col,colKnown:true}}
   const ty=(o.p.type||"").toLowerCase(),sub=(ty.split("—")[1]||"").trim().split(/\s+/).filter(Boolean);
   return {token:false,cre:/creature/.test(ty),art:/artifact/.test(ty),ench:/enchantment/.test(ty),land:/\bland\b/.test(ty),pw:/planeswalker/.test(ty),subt:sub,col:null,colKnown:false}}
 function trigMatch(f,o,src){/* returns true, "maybe" or false */
@@ -1060,6 +1062,7 @@ function setHTML(el,html){if(el.__h===html)return;
 function render(){
   save();
   const T=totals(),last=S.log[S.log.length-1];if(T.all>S.st.maxTok)S.st.maxTok=T.all;
+  if(UI.cf&&!typeWords().includes(UI.cf)){UI.cf="";saveUI()}
   setHTML(document.getElementById("app"),`
   <header><h1>Token Board</h1><button class="ghost" data-a="menu">Menu</button></header>
   ${S.example?`<div class="note">Example board loaded. Moving over from the old version? Menu → Backup & restore. Otherwise start fresh from Menu → New game.</div>`:""}
@@ -1557,7 +1560,7 @@ function renderSheet(){
     <p class="sec">Starting life</p>
     <div class="seg">${[20,25,30,40].map(v=>`<button data-a="startlife" data-v="${v}" class="${S.start===v?"on":""}">${v}</button>`).join("")}</div>
     <button class="btn${pendingReset?" warnbtn":""}" data-a="reset">${pendingReset?"Tap again: clear the board":"New game"}</button>
-    <div class="note">New game clears tokens, buffs and the log, and sets life to ${S.start}. Saved decks stay.</div>`;
+    <div class="note">New game clears tokens, permanents, buffs, counters and the log, and sets life to ${S.start}. Saved decks, opponent names and settings stay.</div>`;
   } else if(sheet.kind==="decks"){
     body=head("Deck presets",`<button class="ghost" data-a="menu">Back</button>${done}`)+`
     <button class="btn pri" data-a="impopen">Import tokens from a decklist</button>
@@ -1693,7 +1696,7 @@ function act(ds,held){
       if(!ex)S.turn.d+=gone;commitAtk();S.lastAtk=null;sheet=null;
       log(`Board wipe: ${gone?parts.join(", ")+(ex?" exiled":" died"):"no creatures removed"}${kept?` · ${kept} survived${shielded?` (${shielded} lost a shield counter)`:""}`:""}`);break}
     case"dbl":S.dbl=Math.max(0,Math.min(5,S.dbl+ +ds.v));log(`Doublers ×${mult()}`,"dbl");break;
-    case"reset":if(pendingReset){let g=null;if(played()){g=gameSummary();if(F("history")){GH.push(g);saveGH()}}S=fresh(S.start);pendingReset=false;sheet=g&&F("summary")?{kind:"summary",g,fresh:true}:null}else pendingReset=true;break;
+    case"reset":if(pendingReset){let g=null;if(played()){g=gameSummary();if(F("history")){GH.push(g);saveGH()}}S={...fresh(S.start),cmdN:S.cmdN,opp:[...S.opp]};pendingReset=false;sheet=g&&F("summary")?{kind:"summary",g,fresh:true}:null}else pendingReset=true;break;
     case"startlife":S.start=+ds.v;break;
     case"undo":if(hist.length){S=hist.pop();if(sheet&&["atk"].includes(sheet.kind))sheet=null}break;
     case"mk1":create(t,1);break;
@@ -1851,7 +1854,7 @@ function act(ds,held){
       const cd=S.deck&&D.find(x=>x.id===S.deck.id);let up=false;if(cd)for(const pt of cd.tokens)if(pt.name===tk.name&&pt.p===tk.p&&pt.t===tk.t&&normTxt(pt.text)===normTxt(tk.text)&&pt.img===old){pt.img=v.art;up=true}
       log(`${tk.name}: card version changed to ${v.set}${v.year?" ("+v.year+")":""}${up?`, saved to ${cd.name}`:""}`);break}
     case"preset":{const tk=newTok(PRESETS[+ds.i]);S.tokens.push(tk);S.example=false;sheet={kind:"tok",id:tk.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};break}
-    case"deckload":{const d=D.find(x=>x.id===ds.id);if(!d)break;S={...fresh(S.start),tokens:d.tokens.map(newTok),deck:{id:d.id,name:d.name}};log(`Loaded deck ${d.name}`);sheet=null;break}
+    case"deckload":{const d=D.find(x=>x.id===ds.id);if(!d)break;S={...fresh(S.start),cmdN:S.cmdN,opp:[...S.opp],tokens:d.tokens.map(newTok),deck:{id:d.id,name:d.name}};log(`Loaded deck ${d.name}`);sheet=null;break}
     case"deckdel":if(pendingDeck===ds.id){D=D.filter(x=>x.id!==ds.id);pendingDeck=null}else pendingDeck=ds.id;break;
     case"bkphotos":sheet.photos=document.getElementById("bk-photos").checked;sheet.show=false;sheet.msg="";break;
     case"bkcopy":{const txt=backupJSON(sheet.photos);
@@ -1991,7 +1994,7 @@ document.addEventListener("submit",e=>{
     S.tokens.push(t);S.example=false;sheet={kind:"tok",id:t.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};log(`Added ${t.name} to the board`);
   }else{
     const t=S.tokens.find(x=>x.id===sheet.id);if(!t)return;
-    Object.assign(t,d);if(!t.creature)t.stacks.forEach(s=>{s.c=0;s.sick=false});if(t.emblem)t.stacks.forEach(s=>{s.tapped=false;s.d=0});merge(t);
+    Object.assign(t,d);delete t.ctype;if(!t.creature)t.stacks.forEach(s=>{s.c=0;s.sick=false});if(t.emblem)t.stacks.forEach(s=>{s.tapped=false;s.d=0});merge(t);
     log(`Edited ${t.name}`);sheet={kind:"tok",id:t.id,sel:0,amt:1,dmg:1,bp:0,bt:0,ec:0};
   }
   pendingDel=false;render();
